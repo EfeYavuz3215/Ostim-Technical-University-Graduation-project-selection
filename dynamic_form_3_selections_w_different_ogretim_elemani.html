@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Bitirme Projesi Seçimi — 3 Farklı Öğretim Elemanı</title>
+  <style>
+    :root{--gap:14px}
+    body{font:16px/1.5 system-ui,Segoe UI,Roboto,Arial,sans-serif; margin:0; padding:24px; background:#fafafa; color:#111}
+    .container{max-width:840px; margin:auto}
+    h1{font-size:1.6rem; margin:0 0 8px}
+    p.lead{color:#555; margin:0 0 20px}
+    fieldset{border:1px solid #e4e4e7; background:#fff; border-radius:14px; padding:16px; margin:0 0 16px}
+    legend{font-weight:600; padding:0 6px}
+    label{display:block; font-weight:600; margin:0 0 6px}
+    .row{display:grid; grid-template-columns:1fr 1fr 1fr; gap:var(--gap)}
+    select, input[type="text"], input[type="email"], button{width:100%; box-sizing:border-box; font:inherit; padding:10px 12px; border:1px solid #d4d4d8; border-radius:10px; background:#fff}
+    select:disabled{background:#f6f6f6}
+    .hint{color:#666; font-size:0.9rem}
+    .error{color:#b91c1c}
+    .ok{color:#047857}
+    .stack{display:grid; gap:var(--gap)}
+    .actions{display:flex; gap:10px; flex-wrap:wrap}
+    .tag{display:inline-block; border:1px solid #e5e7eb; background:#f9fafb; padding:4px 8px; border-radius:999px; font-size:0.8rem; color:#374151}
+    .footer{margin-top:16px; color:#6b7280; font-size:0.9rem}
+    .sr-only{position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Bitirme Projesi Seçimi</h1>
+    <p class="lead">Her öğrenci <strong>3 farklı</strong> proje seçmelidir ve bu 3 projenin <strong>öğretim elemanları birbirinden farklı</strong> olmalıdır.</p>
+
+    <form id="form" class="stack" novalidate>
+      <fieldset>
+        <legend>Öğrenci Bilgileri</legend>
+        <div class="row">
+          <div>
+            <label for="fullName">Ad Soyad</label>
+            <input id="fullName" name="fullName" type="text" required placeholder="Adınız Soyadınız" autocomplete="name" />
+          </div>
+          <div>
+            <label for="studentNo">Öğrenci No</label>
+            <input id="studentNo" name="studentNo" type="text" required placeholder="Örn: 2020123456" />
+          </div>
+          <div>
+            <label for="email">E-posta</label>
+            <input id="email" name="email" type="email" required placeholder="you@uni.edu.tr" autocomplete="email" />
+          </div>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Proje Seçimleri (3 farklı öğretim elemanı)</legend>
+        <p class="hint">Listeler <span class="tag">projects.json</span> dosyasından yüklenir. Her seçimde aynı projeyi seçemezsiniz.</p>
+        <div class="row">
+          <div>
+            <label for="sel1">1. Seçim</label>
+            <select id="sel1" name="sel1" required disabled>
+              <option value="">Yükleniyor…</option>
+            </select>
+          </div>
+          <div>
+            <label for="sel2">2. Seçim</label>
+            <select id="sel2" name="sel2" required disabled>
+              <option value="">Yükleniyor…</option>
+            </select>
+          </div>
+          <div>
+            <label for="sel3">3. Seçim</label>
+            <select id="sel3" name="sel3" required disabled>
+              <option value="">Yükleniyor…</option>
+            </select>
+          </div>
+        </div>
+        <div id="validation" class="hint" aria-live="polite"></div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Onay</legend>
+        <label><input id="confirm" type="checkbox" required /> Bilgilerimin doğru olduğunu onaylıyorum.</label>
+      </fieldset>
+
+      <div class="actions">
+        <button type="submit" id="submitBtn">Gönder</button>
+        <button type="button" id="downloadBtn" title="Seçimlerinizi JSON olarak indirir">JSON İndir</button>
+        <button type="button" id="resetBtn">Temizle</button>
+        <span id="submitStatus" class="hint" aria-live="polite"></span>
+      </div>
+
+      <p class="footer">İpucu: <span class="tag">projects.json</span> dosyasını bu HTML ile aynı klasöre koyun ve statik olarak barındırın (GitHub Pages / Netlify / Vercel). Aşağıdaki doğrulama kuralları form gönderilmeden önce kontrol edilir.</p>
+    </form>
+  </div>
+
+  <script>
+    const state = { projects: [], byId: new Map() };
+    const selects = ["sel1","sel2","sel3"].map(id => document.getElementById(id));
+    const validationEl = document.getElementById("validation");
+    const submitBtn = document.getElementById("submitBtn");
+
+    async function loadProjects() {
+      try {
+        const resp = await fetch("projects.json", {cache: "no-store"});
+        if (!resp.ok) throw new Error("projects.json yüklenemedi");
+        const data = await resp.json();
+        // Normalize and sort
+        state.projects = data
+          .filter(p => p && p.id && p.title)
+          .map(p => ({
+            id: String(p.id),
+            title: String(p.title),
+            ogretim: String(p.ogretim_elemani || p.ogretim || p.ogretimElemani || "Bilinmiyor")
+          }))
+          .sort((a,b) => a.title.localeCompare(b.title, "tr"));
+        state.byId = new Map(state.projects.map(p => [p.id, p]));
+        for (const sel of selects) fillSelect(sel, state.projects);
+      } catch (e) {
+        validationEl.innerHTML = `<span class="error">Hata: ${e.message}. projects.json dosyasını bu HTML ile aynı klasöre koyun.</span>`;
+      } finally {
+        for (const sel of selects) sel.disabled = state.projects.length === 0;
+      }
+    }
+
+    function fillSelect(sel, projects){
+      sel.innerHTML = "";
+      const ph = document.createElement("option");
+      ph.value = ""; ph.textContent = "Proje seçin…"; sel.appendChild(ph);
+      // Group by öğretim elemanı: use <optgroup>
+      const groups = new Map();
+      for (const p of projects){
+        if (!groups.has(p.ogretim)) groups.set(p.ogretim, []);
+        groups.get(p.ogretim).push(p);
+      }
+      const sortedInstructors = Array.from(groups.keys()).sort((a,b)=>a.localeCompare(b, "tr"));
+      for (const instr of sortedInstructors){
+        const og = document.createElement("optgroup");
+        og.label = instr;
+        for (const p of groups.get(instr)){
+          const opt = document.createElement("option");
+          opt.value = p.id; opt.textContent = p.title;
+          og.appendChild(opt);
+        }
+        sel.appendChild(og);
+      }
+    }
+
+    // Validation: 3 selected, unique project IDs, and unique öğretim elemanı
+    function validate(){
+      const ids = selects.map(s => s.value).filter(Boolean);
+      const errors = [];
+      if (ids.length !== 3) errors.push("Lütfen 3 proje seçin.");
+      // Unique projects
+      const uniqueIds = new Set(ids);
+      if (uniqueIds.size !== ids.length) errors.push("Aynı projeyi birden fazla seçtiniz.");
+      // Unique instructors
+      const instructors = ids.map(id => state.byId.get(id)?.ogretim || "");
+      const uniqueInstr = new Set(instructors);
+      if (ids.length === 3 && uniqueInstr.size !== 3) errors.push("3 seçimin öğretim elemanları farklı olmalıdır.");
+
+      if (errors.length){
+        validationEl.className = "hint error";
+        validationEl.textContent = errors.join(" ");
+        return { ok:false, errors };
+      } else {
+        const tag = instructors.map(x=>`• ${x}`).join("  ");
+        validationEl.className = "hint ok";
+        validationEl.textContent = `Uygun: 3 farklı öğretim elemanı seçildi. ${tag}`;
+        return { ok:true };
+      }
+    }
+
+    // Disable selecting the same project in other dropdowns by hiding those options
+    function syncDisableOptions(){
+      const chosen = new Set(selects.map(s=>s.value).filter(Boolean));
+      for (const sel of selects){
+        for (const opt of sel.querySelectorAll("option")){
+          if (!opt.value) continue;
+          opt.disabled = chosen.has(opt.value) && sel.value !== opt.value;
+        }
+      }
+    }
+
+    // Hook up events
+    for (const sel of selects){
+      sel.addEventListener("change", () => { syncDisableOptions(); validate(); saveDraft(); });
+    }
+
+    // Draft persistence
+    function saveDraft(){
+      const payload = {
+        fullName: document.getElementById("fullName").value.trim(),
+        studentNo: document.getElementById("studentNo").value.trim(),
+        email: document.getElementById("email").value.trim(),
+        sel1: document.getElementById("sel1").value,
+        sel2: document.getElementById("sel2").value,
+        sel3: document.getElementById("sel3").value
+      };
+      localStorage.setItem("bitirmeFormDraft", JSON.stringify(payload));
+    }
+    function loadDraft(){
+      try{
+        const raw = localStorage.getItem("bitirmeFormDraft");
+        if (!raw) return;
+        const d = JSON.parse(raw);
+        for (const k of ["fullName","studentNo","email"]) if (d[k]) document.getElementById(k).value = d[k];
+        // selections loaded after projects
+        return d;
+      }catch{ return null }
+    }
+
+    document.getElementById("form").addEventListener("input", saveDraft);
+    document.getElementById("resetBtn").addEventListener("click", ()=>{ localStorage.removeItem("bitirmeFormDraft"); location.reload(); });
+
+    // Submission (client-side only). Replace ENDPOINT with your backend to actually store it.
+    document.getElementById("form").addEventListener("submit", async (e)=>{
+      e.preventDefault();
+      const v = validate();
+      if (!v.ok){
+        document.getElementById("submitStatus").textContent = "Gönderilemedi. Lütfen uyarıları düzeltin.";
+        return;
+      }
+      const fd = new FormData(e.currentTarget);
+      const payload = Object.fromEntries(fd.entries());
+      // Example POST — set to your endpoint if available
+      const ENDPOINT = ""; // e.g., "https://your-backend.example/bitirme/submit"
+      if (ENDPOINT){
+        try{
+          const res = await fetch(ENDPOINT, {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(payload)});
+          if (!res.ok) throw new Error("Sunucu hatası");
+          document.getElementById("submitStatus").textContent = "Gönderildi ✔️";
+        }catch(err){
+          document.getElementById("submitStatus").textContent = "Gönderim hatası: " + err.message;
+        }
+      } else {
+        document.getElementById("submitStatus").textContent = "(Örnek) Geçerli — kayıt için backend ekleyin veya JSON indirin.";
+      }
+    });
+
+    // Download JSON of selections as fallback
+    document.getElementById("downloadBtn").addEventListener("click", ()=>{
+      const v = validate();
+      if (!v.ok){ alert("Önce 3 farklı öğretim elemanı ile seçim yapın."); return; }
+      const payload = {
+        fullName: document.getElementById("fullName").value.trim(),
+        studentNo: document.getElementById("studentNo").value.trim(),
+        email: document.getElementById("email").value.trim(),
+        selections: selects.map((s,i)=>({
+          order: i+1,
+          projectId: s.value,
+          projectTitle: state.byId.get(s.value)?.title || "",
+          ogretimElemani: state.byId.get(s.value)?.ogretim || ""
+        })),
+        timestamp: new Date().toISOString()
+      };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], {type:"application/json"});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = "bitirme-secim.json"; a.click();
+      URL.revokeObjectURL(url);
+    });
+
+    (async function init(){
+      const draft = loadDraft();
+      await loadProjects();
+      if (draft){
+        for (const id of ["sel1","sel2","sel3"]) if (draft[id]) document.getElementById(id).value = draft[id];
+      }
+      syncDisableOptions();
+      validate();
+    })();
+  </script>
+</body>
+</html>
